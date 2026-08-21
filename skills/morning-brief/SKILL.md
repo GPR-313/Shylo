@@ -36,9 +36,9 @@ rather than filling the gap from memory.
 
 ### 2. Orient against the ledger and the error library
 
-- `python3 scripts/ledger.py list --status open` — which open calls does
-  today's data support, weaken, or resolve early?
-- `python3 scripts/ledger.py list --status overdue` — anything overdue gets
+- `python -m argus.ledger list --open` — which open calls does today's data
+  support, weaken, or resolve early?
+- `python -m argus.ledger list --open | grep OVERDUE` — anything overdue gets
   resolved today, not "later".
 - Read `docs/error-patterns.md`. Every new call you're about to make gets
   checked against it.
@@ -58,9 +58,13 @@ Formulate at least one new falsifiable call (more when the data offers them).
 Log each via:
 
 ```bash
-python3 scripts/ledger.py add --claim "..." --p 0.NN --resolve-by YYYY-MM-DD \
-    --criteria "..." --domain ... --thesis "..."
+python -m argus.ledger add --claim "..." --prob 0.NN --by YYYY-MM-DD \
+    --criteria "..." --domain ... --reasoning "..." --kill "..."
 ```
+
+Where a prediction market prices the same question, quote its implied
+probability (`argus/sources/prediction_markets.py`) and state whether you are
+differing from it and why. No edge over the market is a valid finding — say it.
 
 If the validator rejects a call, sharpen it until it passes. The brief may
 only reference predictions by their ledger id — an unlogged prediction in a

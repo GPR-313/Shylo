@@ -1,0 +1,47 @@
+name: morning-brief
+
+on:
+  schedule:
+    # 11:30 UTC = 07:30 America/Detroit (EDT). GitHub cron is UTC-only and has
+    # no DST awareness -- this drifts an hour in winter. Adjust or accept it.
+    - cron: "30 11 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Check source health
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          RWA_XYZ_API_KEY: ${{ secrets.RWA_XYZ_API_KEY }}
+          ARGUS_USER_AGENT: ${{ secrets.ARGUS_USER_AGENT }}
+        run: python scripts/check_sources.py
+
+      - name: Flag overdue predictions
+        run: |
+          python -m argus.ledger list --open | grep OVERDUE \
+            && echo "::warning::overdue predictions need resolving" || true
+
+      - name: Score the ledger
+        run: python -m argus.ledger score
+
+      - name: Commit any ledger updates
+        run: |
+          git config user.name  "argus-bot"
+          git config user.email "argus-bot@users.noreply.github.com"
+          git add -A data/ docs/
+          git diff --staged --quiet || git commit -m "chore: automated brief run $(date -u +%F)"
+          git push

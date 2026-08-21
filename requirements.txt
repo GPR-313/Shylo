@@ -1,0 +1,9 @@
+# ARGUS runtime dependencies. Deliberately small -- the ledger stack is stdlib
+# only, so `python -m argus.ledger` keeps working even if this file rots.
+
+# HTTP for every client in argus/sources/ (see sources/base.py).
+requests>=2.31,<3
+
+# Loads .env in scripts/check_sources.py. Optional at import time -- the
+# script degrades to reading the ambient environment if it is missing.
+python-dotenv>=1.0,<2

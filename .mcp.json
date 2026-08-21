@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "edgar": {
+      "command": "uvx",
+      "args": ["sec-edgar-mcp"],
+      "env": {
+        "SEC_EDGAR_USER_AGENT": "${EDGAR_IDENTITY}"
+      }
+    }
+  }
+}

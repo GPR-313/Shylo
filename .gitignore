@@ -16,6 +16,7 @@ venv/
 
 # Caches & scratch
 .cache/
+
 data/cache/
 scratch/
 tmp/

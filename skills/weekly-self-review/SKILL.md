@@ -13,7 +13,7 @@ immediately after any thesis hits its kill criteria.
 ### 1. Resolve everything that's due
 
 ```bash
-python3 scripts/ledger.py list --status overdue
+python -m argus.ledger list --open | grep OVERDUE
 ```
 
 For each overdue prediction: research the actual outcome against the
@@ -21,8 +21,8 @@ prediction's own `resolution_criteria` (fetch the named source — do not
 adjudicate from memory), then:
 
 ```bash
-python3 scripts/ledger.py resolve <id> --outcome yes|no|unresolvable \
-    --notes "<source consulted + what happened>"
+python -m argus.ledger resolve <id> --outcome true|false|unresolvable \
+    --note "<source consulted + what happened>"
 ```
 
 `unresolvable` is for genuinely unadjudicable outcomes (source vanished,
@@ -32,9 +32,14 @@ any open prediction whose outcome is already locked in.
 ### 2. Score
 
 ```bash
-python3 scripts/ledger.py score
+python -m argus.ledger score
 python3 scripts/calibration.py
 ```
+
+`score` reports the `unresolvable` count alongside the Brier. That rate audits
+the falsifiability gate itself: unresolvables are criteria failures, not
+forecasting failures. Above ~10% of everything closed, fix the criteria
+template before logging more calls.
 
 Note overall Brier, best/worst domain, and calibration-curve shape. Compare
 against last week's memo: **a flat or worsening curve two weeks running is an
