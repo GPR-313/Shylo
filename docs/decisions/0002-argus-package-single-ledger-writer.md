@@ -94,7 +94,12 @@ exists to prevent — arriving by schema drift rather than by intent.
   none, and that shape is a plausible 404. An empty path now hits `base_url`
   unchanged. Not verified against the live API — outbound calls were blocked in
   the environment where this was written.
-- **No MCP wrapper for prediction markets or Treasury data.** `argus/sources/`
-  already reaches both over plain REST; a second path to the same numbers is a
-  way to get two answers and no way to choose. `.mcp.json` declares `edgar` and
-  `sqlite` only.
+- **`.mcp.json` declares `edgar` only.** No MCP wrapper for prediction markets
+  or Treasury data: `argus/sources/` already reaches both over plain REST, and a
+  second path to the same numbers is a way to get two answers and no way to
+  choose. `edgar` (`uvx sec-edgar-mcp`, reading `SEC_EDGAR_USER_AGENT` from
+  `EDGAR_IDENTITY`) was verified live — it registers 21 tools. A `sqlite` server
+  was declared and removed the same day: `mcp-server-sqlite` 2025.4.25 crashes
+  on startup against the current MCP SDK (`'Server' object has no attribute
+  'list_resources'`), and per ADR 0001 the ledger stays JSONL until ~1,000
+  records, so nothing needs it.

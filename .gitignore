@@ -17,8 +17,6 @@ venv/
 # Caches & scratch
 .cache/
 
-# Local sqlite scratch DB for the sqlite MCP server (data/ is otherwise committed)
-data/argus.db
 data/cache/
 scratch/
 tmp/

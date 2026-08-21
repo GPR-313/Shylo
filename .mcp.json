@@ -6,10 +6,6 @@
       "env": {
         "SEC_EDGAR_USER_AGENT": "${EDGAR_IDENTITY}"
       }
-    },
-    "sqlite": {
-      "command": "uvx",
-      "args": ["mcp-server-sqlite", "--db-path", "./data/argus.db"]
     }
   }
 }

@@ -260,9 +260,15 @@ edge there and must say so.
 ### Connectors
 
 Local MCP servers are declared in `.mcp.json` and picked up by Claude Code
-automatically — currently `edgar` (SEC filings) and `sqlite` (ad-hoc analysis),
-both launched via `uvx`. **Verify the package identifiers against the upstream
-projects before first run**; they are the intended servers, not a tested pin.
+automatically — currently just `edgar` (SEC filings), launched via
+`uvx sec-edgar-mcp` and reading `SEC_EDGAR_USER_AGENT` from `EDGAR_IDENTITY`.
+Verified live: the server registers 21 tools covering filings, XBRL financials,
+segment data, and Form 4 insider transactions.
+
+A `sqlite` server was declared and then removed: `mcp-server-sqlite` 2025.4.25
+crashes on startup against the current MCP SDK (`'Server' object has no
+attribute 'list_resources'`). Nothing needs it today anyway — ADR 0001 keeps
+the ledger as JSONL and defers a database until ~1,000 records.
 
 Hosted MCPs authenticate via OAuth and must be added in claude.ai Settings →
 Connectors, or with `claude mcp add --transport http <name> <url>`:
