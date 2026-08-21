@@ -179,9 +179,14 @@ The deliverable this module exists to produce — a living, personal roadmap:
 | Path | What lives there |
 |---|---|
 | `CLAUDE.md` | The agent's standing operating instructions — the Prime Directives and Personality Spec, translated into rules it reads on every invocation |
-| `data/ledger/predictions.jsonl` | The prediction ledger: append-only JSONL, written **only** through `scripts/ledger.py` |
-| `scripts/ledger.py` | Ledger CLI — `add`, `resolve`, `score`, `list`, `show`, `audit`; enforces falsifiability at write time |
-| `scripts/calibration.py` | Calibration report — Brier by domain, calibration curve, overdue queue |
+| `data/ledger/predictions.jsonl` | The prediction ledger: append-only JSONL, written **only** through `argus/ledger.py` |
+| `argus/ledger.py` | Ledger CLI — `add`, `resolve`, `list`, `score`, `show`, `audit`; enforces falsifiability at write time |
+| `argus/sources/` | Cached, rate-limited REST clients for the OBSERVE layer (see below) |
+| `scripts/calibration.py` | Calibration report — Brier by domain, calibration curve, overdue queue, unresolvable audit |
+| `scripts/check_sources.py` | Status board: is every configured source reachable? |
+| `scripts/setup.sh` | Idempotent setup — venv, deps, `.env`, source health check |
+| `.mcp.json` | Local MCP servers, picked up by Claude Code automatically |
+| `.github/workflows/` | Scheduled runs |
 | `skills/` | Agent workflows: `morning-brief/`, `weekly-self-review/` |
 | `prompts/` | Invocation prompts for each workflow (what a scheduler will eventually send) |
 | `data/briefs/` | Dated Morning Brief outputs |
@@ -197,6 +202,81 @@ The deliverable this module exists to produce — a living, personal roadmap:
 - **Memory:** vector store for narrative/trend history + relational DB for the prediction ledger
 - **Ingestion:** market-data API, news API, social listening feeds, regulatory/docket trackers, preprint monitors
 - **Interface:** dashboard (conviction leaderboard, catalyst timeline, calibration curves) + push alerts
+
+---
+
+## Running It
+
+```bash
+git clone <this-repo> && cd Shylo
+./scripts/setup.sh          # venv, deps, .env, source health check
+# then fill in .env — FRED_API_KEY and CONGRESS_API_KEY are free and instant;
+# EDGAR_IDENTITY just needs your real email or the SEC blocks you
+python3 scripts/check_sources.py
+```
+
+Nothing but the standard library is needed to run the ledger; keys only gate
+the OBSERVE layer.
+
+### Prediction ledger
+
+The enforcement mechanism for Prime Directives #3 and #4. Append-only JSONL;
+git history is the audit trail. The validator rejects any forecast without a
+probability strictly between 0 and 1, a future resolve-by date, and resolution
+criteria a stranger could grade.
+
+```bash
+python -m argus.ledger add --claim "..." --prob 0.62 --by 2027-03-31 \
+    --criteria "RWA.xyz tokenized Treasury AUM above \$50B before 2027-03-31" \
+    --domain tokenization --reasoning "..." --kill "..."
+
+python -m argus.ledger list --open      # OVERDUE flagged automatically
+python -m argus.ledger resolve <id> --outcome true --note "post-mortem"
+python -m argus.ledger score            # Brier, skill score, calibration table
+python -m argus.ledger audit            # catches hand edits
+python3 scripts/calibration.py          # full markdown report
+```
+
+`--outcome unresolvable` retires a call that could not be adjudicated as
+written. It is excluded from Brier scoring and counted separately, because an
+unresolvable is a failure of the *criteria*, not of the forecast.
+
+### Sources
+
+Everything in `argus/sources/` is plain REST behind a shared `Source` base that
+supplies caching, retries, and rate limiting.
+
+| Module | Sources | Key needed |
+|---|---|---|
+| `tokenization.py` | DeFiLlama, RWA.xyz | `RWA_XYZ_API_KEY` (DeFiLlama is free) |
+| `macro.py` | FRED, Treasury FiscalData, NY Fed | `FRED_API_KEY` (the other two are free) |
+| `narrative.py` | GDELT, ApeWisdom, Tradestie | none |
+| `prediction_markets.py` | Polymarket, Kalshi | none for public reads |
+
+Prediction markets are a **calibration benchmark**, not a trading venue: if
+ARGUS cannot beat Polymarket on a question Polymarket already prices, it has no
+edge there and must say so.
+
+### Connectors
+
+Local MCP servers are declared in `.mcp.json` and picked up by Claude Code
+automatically — currently `edgar` (SEC filings) and `sqlite` (ad-hoc analysis),
+both launched via `uvx`. **Verify the package identifiers against the upstream
+projects before first run**; they are the intended servers, not a tested pin.
+
+Hosted MCPs authenticate via OAuth and must be added in claude.ai Settings →
+Connectors, or with `claude mcp add --transport http <name> <url>`:
+
+| Server | URL |
+|---|---|
+| Blockscout | `https://mcp.blockscout.com/mcp` (free, no auth) |
+| Unusual Whales | `https://unusualwhales.com/public-api/mcp` |
+| Token Terminal | `https://mcp.tokenterminal.com` |
+| Dune | see `dune.com/blog/dune-mcp` |
+
+No MCP wrapper is declared for prediction markets or Treasury data — those are
+already covered by `argus/sources/` over plain REST, and a second path to the
+same numbers is a way to get two answers.
 
 ---
 
