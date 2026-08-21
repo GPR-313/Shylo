@@ -187,12 +187,42 @@ The deliverable this module exists to produce — a living, personal roadmap:
 | `scripts/setup.sh` | Idempotent setup — venv, deps, `.env`, source health check |
 | `.mcp.json` | Local MCP servers, picked up by Claude Code automatically |
 | `.github/workflows/` | Scheduled runs |
-| `skills/` | Agent workflows: `morning-brief/`, `weekly-self-review/` |
+| `skills/` | Agent workflows. Ledger loop: `morning-brief/`, `weekly-self-review/`. Memory loop: `argus-capture/`, `argus-recall/`, `argus-sweep/`, `argus-dossier/`, `argus-synthesis/`. Research: `ai-bottleneck-hunter/` |
 | `prompts/` | Invocation prompts for each workflow (what a scheduler will eventually send) |
 | `data/briefs/` | Dated Morning Brief outputs |
 | `data/reviews/` | Dated weekly self-review memos |
 | `docs/error-patterns.md` | The error-pattern library — every miss's autopsy feeds it; checked before new calls ship |
 | `docs/decisions/` | Architecture decision records |
+| `argus/ARGUS.md` | Constitution of the memory brain — the document every `argus-*` skill reads first |
+| `argus/INDEX.md` | Master index: active threads, entities & watch list, open questions, doc registry |
+| `argus/core.md` | Distilled durable memory — identity, principles, working theses; written only by `argus-synthesis` |
+| `argus/memory/` | Monthly memory journals, `YYYY-MM.md`, newest entry first |
+| `argus/dossiers/` | Deep-research dossiers filed by `argus-dossier` |
+| `argus/sweeps/` | Daily sweep briefs filed by `argus-sweep` |
+| `argus/archive/` | Retired material — superseded, never deleted |
+
+---
+
+## The Memory Brain
+
+The ledger enforces honesty about the future; the memory brain enforces continuity
+across sessions. Both halves live in this repo.
+
+Memory is a set of plain Markdown documents under `argus/`, governed by
+`argus/ARGUS.md`. Five skills operate the loop:
+
+| Skill | Role |
+|---|---|
+| `argus-capture` | **Write path** — file a thought, decision, article, or finding into permanent indexed memory |
+| `argus-recall` | **Read path** — answer from memory with entry-ID citations, and surface connected or stale threads |
+| `argus-sweep` | **Perception** — daily pass across inbox, portfolio, markets, and open threads; one prioritized brief |
+| `argus-dossier` | **Investigation** — deep multi-source research filed as a durable, cross-linked dossier |
+| `argus-synthesis` | **Consolidation** — weekly: promote what proved durable, connect what rhymes, confront contradictions, retire what died |
+
+Every memory entry carries a permanent ID (`M` + `YYYYMMDD` + a per-day letter),
+tags, source, confidence, and an optional review date. Every write updates
+`argus/INDEX.md`. Nothing is deleted — superseded material moves to
+`argus/archive/` with a pointer left behind.
 
 ---
 
