@@ -5,8 +5,12 @@ on:
     # 11:30 UTC = 07:30 America/Detroit (EDT). GitHub cron is UTC-only and has
     # no DST awareness -- this drifts an hour in winter. Adjust or accept it.
     - cron: "30 11 * * 1-5"
+  # `push` on the default branch only, `pull_request` for everything else.
+  # Listening to both on every branch ran the whole suite twice for each push
+  # to an open PR -- once for the push, once for the synchronize -- which buys
+  # nothing and doubles the wait before a red result shows up.
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
