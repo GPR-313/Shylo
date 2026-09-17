@@ -146,3 +146,70 @@ it (ADR, ordinary line, or too illiquid).
   stack (Method step 1) or when you need candidate layers to dig into. It is structural
   knowledge, not a buy list — every name there is a *starting point to verify live*, never a
   recommendation.
+
+## Filing the result — the step that makes this compound
+
+A hunt that ends in a chat message is a hunt you will run again from scratch in
+three months. Before the session closes, convert the output into the stores, or
+the work does not survive.
+
+For **each of the top 3 names**:
+
+1. **Log the falsifiable call.** The bull thesis in your table is an assertion
+   about the future; make it gradeable. The constraint's own metric is usually
+   the cleanest resolution criterion — lead times, utilization, ASPs, qualified-
+   supplier count — because it resolves before the multiple does.
+
+   ```bash
+   python -m argus.ledger add --claim "..." --prob 0.NN --by YYYY-MM-DD \
+       --criteria "<threshold + named source, e.g. 'company reports substrate \
+   utilization above 95% in its FY27Q1 release'>" \
+       --domain tech --reasoning "..." --kill "<the kill trigger from your table>" \
+       --market-prob 0.NN --tickers <local ticker>,<ADR> --sources "..."
+   ```
+
+2. **Register the theme as a thesis.** The theme column *is* the mechanism —
+   write it as a causal chain, not a layer name.
+
+   ```bash
+   python -m argus.theses open --title "<theme>" \
+       --mechanism "<demand forces X, X binds at layer Y because switching cost \
+   is Z months, so rent accrues to whoever holds the qual>" \
+       --kill "<your kill trigger>" --domain tech --stage <stage> \
+       --predictions <ledger-id> --tickers ... --win W --loss L
+   ```
+
+   Stage honestly. A bottleneck the sell-side has already written up is
+   `consensus`, whatever the multiple looks like — and `argus.edge` will size it
+   at 40% accordingly. That discount is the whole point: the rerate you are
+   hunting de-rates just as violently when the constraint clears.
+
+3. **Log the catalyst you named**, with its real date and precision:
+
+   ```bash
+   python -m argus.catalysts add --title "..." --date YYYY-MM-DD \
+       --resolves "<which question this settles>" --domain tech \
+       --precision day|month|quarter --predictions <ledger-id> \
+       --source "<IR calendar / filing / release>"
+   ```
+
+4. **Check correlation before you size anything.** Bottleneck themes correlate
+   hard — they usually share one demand driver (hyperscaler capex) and often one
+   dated event. Three names across three themes can still be one bet:
+
+   ```bash
+   python -m argus.graph concentration
+   python -m argus.edge rank
+   ```
+
+   Where they share a catalyst, size the group with `argus.edge.size_cluster`,
+   not each leg against the per-position cap (EP-000d).
+
+5. **Capture the discards too.** Names that failed the "what's priced in"
+   column are the more valuable half over time: `argus-capture` them tagged
+   `#idea`, with one line on why they failed. That is what stops the same
+   already-consensus name being rediscovered next quarter.
+
+Everything in the master table remains research, sourced and date-stamped, with
+the counter-case attached. Positioning is options with conditions — never
+instructions to execute.

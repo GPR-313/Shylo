@@ -94,6 +94,57 @@ they are not evidence, they are hypotheses about how this agent will fail.
   or an implied constant growth rate?
 - **Prescription:** decompose into known scheduled catalysts plus a residual.
 
+### EP-000d: Correlated bets counted as diversification
+- **First observed:** 2026-08-21 (seeded prior; the shape was noticed by hand in
+  memory entry M20260821e before any tooling existed to find it)
+- **Hits:** 0
+- **Failure class:** bad model
+- **Pattern:** several positions with different tickers, sectors, or even
+  domains resolve off one dated event. The book looks diversified and is one
+  bet, so the drawdown arrives all at once and is several times the size the
+  per-position cap implied.
+- **Detection rule:** does `python -m argus.graph concentration` list a catalyst
+  carrying more than one position? Does `python -m argus.graph cutpoints` return
+  an articulation point with degree above 2? Either is a yes.
+- **Prescription:** size the group as one bet through
+  `argus.edge.size_cluster`, not each leg against the per-position cap. State
+  the shared catalyst explicitly in the output so the reader sees the
+  correlation rather than inferring diversification from the ticker list.
+
+### EP-000e: Thesis outlives its own evidence
+- **First observed:** 2026-08-21 (seeded prior; M20260821f is a real instance —
+  the contradiction was logged honestly and then nothing happened)
+- **Hits:** 0
+- **Failure class:** bad model
+- **Pattern:** evidence against a thesis is observed and recorded, and the
+  thesis keeps its stage, its size, and its place in the brief. Honest logging
+  substitutes for acting on what was logged.
+- **Detection rule:** does `python -m argus status` list this thesis under
+  "latest evidence UNDERCUTS them"? Does the undercutting evidence satisfy the
+  thesis's own `kill` field as written?
+- **Prescription:** stage down, or close with a post-mortem. Argue explicitly
+  why the evidence does not meet the kill criteria, in the output, or act on
+  it. Continuing to publish the thesis at its old size without doing either is
+  the failure.
+
+### EP-000f: Differentiated probability with no benchmark
+- **First observed:** 2026-09-17 (seeded prior, at the point market_prob was
+  added to the ledger)
+- **Hits:** 0
+- **Failure class:** bad model
+- **Pattern:** a probability is published as though it carries edge, on a
+  question a liquid market already prices, without checking or recording that
+  price. The claim to edge is then unfalsifiable: nothing afterwards can show
+  whether ARGUS beat the crowd or merely restated it with more words.
+- **Detection rule:** does the call carry `--market-prob`? If not, has the
+  output stated explicitly that no market prices this question, and named where
+  it looked? Is `python -m argus.ledger score`'s head-to-head verdict "edge"?
+- **Prescription:** search Polymarket and Kalshi
+  (`argus/sources/prediction_markets.py`) before logging; record the price;
+  state the disagreement in points and the mechanism that justifies it. Under
+  five points of disagreement is agreement with the crowd, and should be
+  published as such. No edge over the market is a valid finding.
+
 ---
 
 ## Observed patterns
