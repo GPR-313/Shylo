@@ -22,11 +22,15 @@ if [ ! -f .env ]; then
   echo "    created .env from template -- FILL IT IN before running the brief"
 fi
 
-mkdir -p data/ledger docs/decisions .cache
+mkdir -p data/ledger data/briefs data/reviews docs/decisions .cache
+
+# --- the spine's own tests ------------------------------------------------------
+echo "--> running the test suite (stdlib only, no deps needed)"
+python3 -m unittest discover -s tests 2>&1 | tail -3
 
 # --- optional tooling for the local MCP servers --------------------------------
 command -v uvx >/dev/null 2>&1 \
-  && echo "    uvx found (edgar + sqlite MCP available)" \
+  && echo "    uvx found (edgar MCP available)" \
   || echo "    uvx MISSING -- install uv (https://docs.astral.sh/uv/) for the edgar MCP"
 
 # No npx-based servers are declared: Polymarket, Kalshi, Treasury FiscalData
@@ -54,7 +58,12 @@ cat <<'EOM'
   3. Local MCPs are already declared in .mcp.json -- Claude Code will prompt
      to approve them on first run in this directory.
 
-  4. Log your first prediction so the ledger has something to grade in 90 days:
+  4. See the whole system at a glance:
+       python -m argus status
+
+  5. Log your first prediction so the ledger has something to grade in 90 days,
+     then forge it into a thesis (skills/thesis-forge/SKILL.md):
        python -m argus.ledger add --help
+       python -m argus.theses open --help
 
 EOM

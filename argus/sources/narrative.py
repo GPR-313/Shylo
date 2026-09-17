@@ -138,3 +138,68 @@ class Tradestie(Source):
 
     def wsb(self, date: str | None = None) -> list[dict[str, Any]]:
         return self.get("/reddit", {"date": date} if date else None)
+
+
+class WikipediaPageviews(Source):
+    """Wikimedia pageviews — attention with far less gaming than social counts.
+
+    Reddit mention counts are trivially manipulated and skew to whatever the
+    retail crowd is already trading. Wikipedia lookups measure something
+    different and harder to fake: people encountering a term and going to find
+    out what it means. That is the *fringe-to-early-adopter* transition in its
+    purest observable form, and it leads the social feeds rather than echoing
+    them.
+
+    Keyless. EP-000a still applies in full -- this is an attention series, not
+    an adoption series, and it needs a fundamental confirmation series before
+    it sizes anything.
+    """
+
+    name = "wikipedia"
+    base_url = "https://wikimedia.org/api/rest_v1/metrics/pageviews"
+    min_interval = 0.3
+    ttl = 21600
+
+    def daily(self, article: str, *, days: int = 90, project: str = "en.wikipedia",
+              access: str = "all-access", agent: str = "user") -> list[dict[str, Any]]:
+        """Daily views for one article title. Spaces become underscores.
+
+        `agent=user` strips bots and spiders, which otherwise dominate the
+        series for any article a scraper happens to like.
+        """
+        end = datetime.now(timezone.utc).date()
+        start = end - timedelta(days=days)
+        title = article.replace(" ", "_")
+        payload = self.get(
+            f"/per-article/{project}/{access}/{agent}/{title}/daily/"
+            f"{start.strftime('%Y%m%d')}/{end.strftime('%Y%m%d')}"
+        )
+        return [
+            {"date": item["timestamp"][:8], "views": item["views"]}
+            for item in payload.get("items", [])
+        ]
+
+    def velocity(self, article: str, *, days: int = 90, baseline: int = 28) -> dict[str, Any]:
+        """Trailing-week mean against the prior baseline, in standard deviations.
+
+        Same z-score shape as `Gdelt.velocity` and `OpenAlex.velocity` on
+        purpose: news, literature, and curiosity read on one scale, so a
+        cross-domain comparison is an arithmetic one rather than a vibe.
+        """
+        series = self.daily(article, days=days)
+        if len(series) < baseline + 7:
+            return {"article": article, "n": len(series), "z": None}
+        values = [row["views"] for row in series]
+        recent = values[-7:]
+        prior = values[-(baseline + 7):-7]
+        latest = sum(recent) / len(recent)
+        mean = sum(prior) / len(prior)
+        sd = (sum((v - mean) ** 2 for v in prior) / len(prior)) ** 0.5
+        return {
+            "article": article,
+            "n": len(series),
+            "latest_7d_mean": round(latest, 1),
+            "baseline_mean": round(mean, 1),
+            "z": round((latest - mean) / sd, 2) if sd else None,
+            "signal": "attention, not adoption (EP-000a)",
+        }

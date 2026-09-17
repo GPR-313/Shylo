@@ -22,13 +22,15 @@ import json
 import os
 import re
 import sys
-import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
 from typing import Any, Iterator
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from . import store
+from .store import ValidationError, record_kind, short_id, split_csv, utc_now
+
+REPO_ROOT = store.REPO_ROOT
 
 # Anchored to the repo, not the cwd, so `python -m argus.ledger` grades the same
 # ledger from a subdirectory, a cron job, or a CI runner.
@@ -73,10 +75,6 @@ _ADJUDICABLE = re.compile(
 )
 
 
-class ValidationError(ValueError):
-    """Raised when a prediction fails the falsifiability gate."""
-
-
 def _validate(p: "Prediction") -> None:
     errs: list[str] = []
 
@@ -119,6 +117,12 @@ def _validate(p: "Prediction") -> None:
     if p.domain not in DOMAINS:
         errs.append(f"domain {p.domain!r} not in {sorted(DOMAINS)}")
 
+    if p.market_prob is not None and not 0.0 < float(p.market_prob) < 1.0:
+        errs.append(
+            f"market_prob must be strictly between 0 and 1 (got {p.market_prob}); "
+            "omit it entirely when no market prices this question"
+        )
+
     if not (p.reasoning or "").strip():
         errs.append(
             "reasoning snapshot is required -- post-mortems need to know what "
@@ -136,10 +140,6 @@ def _validate(p: "Prediction") -> None:
 # --------------------------------------------------------------------------
 
 
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
 @dataclass
 class Prediction:
     claim: str
@@ -149,11 +149,17 @@ class Prediction:
     domain: str
     reasoning: str
     kill_criteria: str = ""    # what would falsify the parent thesis
-    thesis: str = ""           # free-text thesis tag, groups related calls
+    thesis: str = ""           # thesis id (see argus/theses.py) or free-text tag
+    catalyst: str = ""         # catalyst id (see argus/catalysts.py) that resolves this
+    # Prediction-market implied probability for the same question at write
+    # time, when one exists. CLAUDE.md has always required quoting it; storing
+    # it is what makes "did ARGUS beat the crowd?" answerable afterwards
+    # instead of merely assertable. None = no market prices this question.
+    market_prob: float | None = None
     tickers: list[str] = field(default_factory=list)
     sources: list[str] = field(default_factory=list)
-    id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
-    created_at: str = field(default_factory=_now)
+    id: str = field(default_factory=short_id)
+    created_at: str = field(default_factory=utc_now)
     kind: str = "prediction"
 
     def to_json(self) -> str:
@@ -165,7 +171,7 @@ class Resolution:
     prediction_id: str
     outcome: bool | str        # True | False | "unresolvable"
     note: str = ""
-    resolved_at: str = field(default_factory=_now)
+    resolved_at: str = field(default_factory=utc_now)
     kind: str = "resolution"
 
     def to_json(self) -> str:
@@ -177,34 +183,13 @@ class Resolution:
 # --------------------------------------------------------------------------
 
 
-def _append(record: Prediction | Resolution, path: Path = LEDGER_PATH) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(record.to_json() + "\n")
+def _append(record: Prediction | Resolution, path: Path | None = None) -> None:
+    store.append_record(path or LEDGER_PATH, record)
 
 
-def read_all(path: Path = LEDGER_PATH) -> Iterator[dict[str, Any]]:
-    if not path.exists():
-        return
-    with path.open(encoding="utf-8") as fh:
-        for lineno, line in enumerate(fh, 1):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                yield json.loads(line)
-            except json.JSONDecodeError as exc:
-                print(f"warn: bad JSON at line {lineno}: {exc}", file=sys.stderr)
-
-
-def record_kind(rec: dict[str, Any]) -> str | None:
-    """Discriminator, tolerant of the pre-0.2 schema.
-
-    Records written by the retired `scripts/ledger.py` used `type`; records
-    written by this module use `kind`. Reading both is what keeps the twenty
-    seeded predictions from silently vanishing at the schema change.
-    """
-    return rec.get("kind") or rec.get("type")
+def read_all(path: Path | None = None) -> Iterator[dict[str, Any]]:
+    """Every raw record, corrupt lines warned and skipped. See `store`."""
+    return store.iter_records(path or LEDGER_PATH)
 
 
 def coerce_outcome(value: Any) -> bool | str | None:
@@ -237,6 +222,8 @@ def normalize(rec: dict[str, Any]) -> dict[str, Any]:
             out["reasoning"] = rec.get("thesis", "")
         out.setdefault("created_at", rec.get("logged_at", ""))
         out.setdefault("kill_criteria", "")
+        out.setdefault("catalyst", "")
+        out.setdefault("market_prob", None)
         out.setdefault("tickers", [])
         out.setdefault("sources", [])
     elif kind == "resolution":
@@ -252,8 +239,9 @@ def is_graded(outcome: Any) -> bool:
     return isinstance(outcome, bool)
 
 
-def load_state(path: Path = LEDGER_PATH) -> dict[str, dict[str, Any]]:
+def load_state(path: Path | None = None) -> dict[str, dict[str, Any]]:
     """Fold the append-only log into current state, keyed by prediction id."""
+    path = path or LEDGER_PATH
     preds: dict[str, dict[str, Any]] = {}
     for raw in read_all(path):
         rec = normalize(raw)
@@ -309,7 +297,8 @@ def brier(probability: float, outcome: bool) -> float:
     return (probability - (1.0 if outcome else 0.0)) ** 2
 
 
-def score(domain: str | None = None, path: Path = LEDGER_PATH) -> dict[str, Any]:
+def score(domain: str | None = None, path: Path | None = None) -> dict[str, Any]:
+    path = path or LEDGER_PATH
     resolved = [
         p for p in load_state(path).values()
         if is_graded(p["outcome"]) and (domain is None or p["domain"] == domain)
@@ -336,9 +325,30 @@ def score(domain: str | None = None, path: Path = LEDGER_PATH) -> dict[str, Any]
         if q["outcome"] == UNRESOLVABLE and (domain is None or q["domain"] == domain)
     )
 
+    # The benchmark that decides whether this project earns its existence.
+    # Being well-calibrated is table stakes; beating the crowd on the questions
+    # the crowd already prices is the only evidence of actual edge. Scored on
+    # the overlapping subset only -- comparing ARGUS's whole book against the
+    # market's subset would flatter ARGUS by construction.
+    head_to_head = [p for p in resolved if p.get("market_prob") is not None]
+    vs_market: dict[str, Any] | None = None
+    if head_to_head:
+        a = sum(brier(p["probability"], p["outcome"]) for p in head_to_head) / len(head_to_head)
+        m = sum(brier(float(p["market_prob"]), p["outcome"]) for p in head_to_head) / len(head_to_head)
+        vs_market = {
+            "n": len(head_to_head),
+            "argus_brier": round(a, 4),
+            "market_brier": round(m, 4),
+            # Negative means ARGUS beat the market. Positive means the honest
+            # move is to defer to the market and say so in the brief.
+            "delta": round(a - m, 4),
+            "verdict": "edge" if a < m else ("no edge" if a > m else "tied"),
+        }
+
     return {
         "n": len(resolved),
         "unresolvable": ungraded,
+        "vs_market": vs_market,
         "brier": round(mean_brier, 4),
         "base_rate": round(base_rate, 4),
         "reference_brier": round(reference, 4),
@@ -350,12 +360,39 @@ def score(domain: str | None = None, path: Path = LEDGER_PATH) -> dict[str, Any]
     }
 
 
-def calibration(bins: int = 5, path: Path = LEDGER_PATH) -> list[dict[str, Any]]:
+def market_coverage(path: Path | None = None) -> dict[str, Any]:
+    """How much of the book carries a market benchmark at all.
+
+    A book with no benchmarks cannot demonstrate edge, only calibration. Low
+    coverage is a process failure, not a data limitation: most ARGUS domains
+    have *something* priced nearby, and where nothing is, saying so explicitly
+    is itself the required finding.
+    """
+    preds = list(load_state(path or LEDGER_PATH).values())
+    if not preds:
+        return {"n": 0, "with_market": 0, "coverage": 0.0}
+    with_market = [p for p in preds if p.get("market_prob") is not None]
+    disagreements = [
+        {"id": p["id"], "argus": p["probability"], "market": float(p["market_prob"]),
+         "delta": round(p["probability"] - float(p["market_prob"]), 3),
+         "claim": p["claim"], "open": p["outcome"] is None}
+        for p in with_market
+    ]
+    return {
+        "n": len(preds),
+        "with_market": len(with_market),
+        "coverage": round(len(with_market) / len(preds), 3),
+        "disagreements": sorted(disagreements, key=lambda d: -abs(d["delta"])),
+    }
+
+
+def calibration(bins: int = 5, path: Path | None = None) -> list[dict[str, Any]]:
     """Bucket forecasts by stated probability and compare to observed frequency.
 
     The gap between `stated` and `observed` is where the agent is fooling itself.
     """
-    resolved = [p for p in load_state(path).values() if is_graded(p["outcome"])]
+    resolved = [p for p in load_state(path or LEDGER_PATH).values()
+                if is_graded(p["outcome"])]
     out = []
     for i in range(bins):
         lo, hi = i / bins, (i + 1) / bins
@@ -390,13 +427,24 @@ def _cmd_add(args: argparse.Namespace) -> int:
             reasoning=args.reasoning,
             kill_criteria=args.kill or "",
             thesis=args.thesis or "",
-            tickers=args.tickers.split(",") if args.tickers else [],
-            sources=args.sources.split(",") if args.sources else [],
+            catalyst=args.catalyst or "",
+            market_prob=args.market_prob,
+            tickers=split_csv(args.tickers),
+            sources=split_csv(args.sources),
         )
     except ValidationError as exc:
         print(f"REJECTED. {exc}", file=sys.stderr)
         return 1
-    print(f"logged {p.id}  P={p.probability:.0%} by {p.resolve_by}  [{p.domain}]")
+    line = f"logged {p.id}  P={p.probability:.0%} by {p.resolve_by}  [{p.domain}]"
+    if p.market_prob is not None:
+        delta = p.probability - p.market_prob
+        line += f"  market={p.market_prob:.0%}  edge={delta:+.0%}"
+        if abs(delta) < 0.05:
+            line += "\n  within 5pts of the market -- this is a agreement, not an edge."
+    else:
+        line += "\n  no market_prob recorded: say in the output whether a market "
+        line += "prices this\n  question at all, or the benchmark is unfalsifiable."
+    print(line)
     return 0
 
 
@@ -440,6 +488,9 @@ def _cmd_list(args: argparse.Namespace) -> int:
         rows = [p for p in rows if p["outcome"] is not None]
     if args.domain:
         rows = [p for p in rows if p["domain"] == args.domain]
+    if args.json:
+        print(json.dumps(rows, indent=2, ensure_ascii=False, default=str))
+        return 0
     if not rows:
         print("(empty)")
         return 0
@@ -475,6 +526,23 @@ def _cmd_score(args: argparse.Namespace) -> int:
             print(f"  {opens} open, {len(state)} logged; first resolves {nxt}")
         return 0
     print(json.dumps(s, indent=2))
+
+    vm = s.get("vs_market")
+    if vm:
+        arrow = "BEATS" if vm["delta"] < 0 else ("LOSES TO" if vm["delta"] > 0 else "TIES")
+        print(f"\nvs market (n={vm['n']}): ARGUS {vm['argus_brier']:.4f} "
+              f"{arrow} market {vm['market_brier']:.4f}  (delta {vm['delta']:+.4f})")
+        if vm["delta"] >= 0:
+            print("  No demonstrated edge on priced questions. Say so in the brief,")
+            print("  and stop publishing differentiated probabilities on them until")
+            print("  a mechanism explains why ARGUS should know better.")
+    else:
+        cov = market_coverage()
+        print(f"\nvs market: no resolved calls carry a market benchmark "
+              f"({cov['with_market']}/{cov['n']} of the book has one).")
+        print("  Log --market-prob on anything a prediction market prices, or the")
+        print("  edge claim is unfalsifiable by construction.")
+
     print("\ncalibration:")
     for row in calibration():
         drift = row["observed"] - row["stated"]
@@ -555,7 +623,13 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--domain", required=True, choices=sorted(DOMAINS))
     a.add_argument("--reasoning", required=True, help="why you believe this, now")
     a.add_argument("--kill", help="what would falsify the parent thesis")
-    a.add_argument("--thesis")
+    a.add_argument("--thesis", help="thesis id from `python -m argus.theses list`")
+    a.add_argument("--catalyst",
+                   help="catalyst id that resolves this (see argus.catalysts); "
+                        "anchoring the date to a real event is EP-000b's fix")
+    a.add_argument("--market-prob", dest="market_prob", type=float,
+                   help="prediction-market implied probability for the same "
+                        "question, 0<p<1. Omit only when no market prices it.")
     a.add_argument("--tickers", help="comma-separated")
     a.add_argument("--sources", help="comma-separated")
     a.set_defaults(func=_cmd_add)
@@ -575,6 +649,8 @@ def main(argv: list[str] | None = None) -> int:
     l.add_argument("--open", action="store_true")
     l.add_argument("--resolved", action="store_true")
     l.add_argument("--domain", choices=sorted(DOMAINS))
+    l.add_argument("--json", action="store_true",
+                   help="machine-readable, for argus.graph and friends")
     l.set_defaults(func=_cmd_list)
 
     s = sub.add_parser("score", help="Brier score and calibration")

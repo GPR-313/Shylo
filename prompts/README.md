@@ -10,6 +10,8 @@ comparable across the transition.
 |---|---|---|
 | `morning-brief.md` | `skills/morning-brief/SKILL.md` | Daily (market days) |
 | `weekly-self-review.md` | `skills/weekly-self-review/SKILL.md` | Weekly (Sunday) |
+| `connection-hunt.md` | `skills/connection-hunt/SKILL.md` | Weekly, or on a failed impress test |
+| `thesis-forge.md` | `skills/thesis-forge/SKILL.md` | On demand — append the observation |
 
 These are triggers, not instructions: the procedure itself lives in the
 skill; the standing rules live in `CLAUDE.md`. Keep it that way — a prompt

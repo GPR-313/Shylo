@@ -1,47 +1,100 @@
-name: morning-brief
+name: argus-health
 
 on:
   schedule:
     # 11:30 UTC = 07:30 America/Detroit (EDT). GitHub cron is UTC-only and has
     # no DST awareness -- this drifts an hour in winter. Adjust or accept it.
     - cron: "30 11 * * 1-5"
+  # `push` on the default branch only, `pull_request` for everything else.
+  # Listening to both on every branch ran the whole suite twice for each push
+  # to an open PR -- once for the push, once for the synchronize -- which buys
+  # nothing and doubles the wait before a red result shows up.
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  brief:
+  # The spine's tests are stdlib-only and run in under a second, so they gate
+  # every push rather than only the scheduled run. A store whose validator has
+  # regressed is worse than no store: it accepts what it should reject, and the
+  # damage is silent until a post-mortem months later (see ADR 0002).
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Run first on a bare interpreter, before installing anything. The spine
+      # -- stores, scoring, sizing, graph -- is stdlib only, and that is a
+      # property worth testing rather than claiming: the source tests skip
+      # when `requests` is absent, so a red line here means something in the
+      # spine grew a dependency it should not have.
+      - name: Test suite on a bare interpreter (no dependencies installed)
+        run: python3 -m unittest discover -s tests
 
+      - name: Spine CLIs must run without dependencies
+        run: |
+          python3 -m argus doctor
+          python3 -m argus.graph stats
+          python3 -m argus.edge size --prob 0.6 --win 2 --loss 1
+
+      - run: pip install -r requirements.txt
+
+      - name: Full test suite, including the source-layer parsers
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Graph integrity
+        run: python3 -m argus.graph stats
+
+  health:
+    needs: test
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-
       - run: pip install -r requirements.txt
 
       - name: Check source health
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           RWA_XYZ_API_KEY: ${{ secrets.RWA_XYZ_API_KEY }}
+          CONGRESS_API_KEY: ${{ secrets.CONGRESS_API_KEY }}
           ARGUS_USER_AGENT: ${{ secrets.ARGUS_USER_AGENT }}
-        run: python scripts/check_sources.py
+        run: python3 scripts/check_sources.py
 
-      - name: Flag overdue predictions
+      # `argus status` exits non-zero when predictions are overdue. That is the
+      # point: an overdue call is memory-holing on a delay, and the annotation
+      # is how it stops being easy to ignore.
+      - name: Book status
         run: |
-          python -m argus.ledger list --open | grep OVERDUE \
-            && echo "::warning::overdue predictions need resolving" || true
+          python3 -m argus status \
+            || echo '::warning::overdue predictions need resolving -- run: python3 -m argus status'
 
-      - name: Score the ledger
-        run: python -m argus.ledger score
+      - name: Unanchored resolve-by dates (EP-000b)
+        run: |
+          python3 -m argus.catalysts orphans \
+            | grep -q "EP-000b clear" \
+            || echo "::warning::open predictions are anchored to no catalyst"
 
-      - name: Commit any ledger updates
+      - name: Score the ledger, including the market head-to-head
+        run: python3 -m argus.ledger score
+
+      - name: Calibration report
+        run: python3 scripts/calibration.py
+
+      - name: Commit any store updates
         run: |
           git config user.name  "argus-bot"
           git config user.email "argus-bot@users.noreply.github.com"
           git add -A data/ docs/
-          git diff --staged --quiet || git commit -m "chore: automated brief run $(date -u +%F)"
+          git diff --staged --quiet || git commit -m "chore: automated health run $(date -u +%F)"
           git push
