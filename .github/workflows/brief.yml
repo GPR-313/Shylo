@@ -25,11 +25,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Run the test suite (no dependencies needed)
-        run: python3 -m unittest discover -s tests -v
+      # Run first on a bare interpreter, before installing anything. The spine
+      # -- stores, scoring, sizing, graph -- is stdlib only, and that is a
+      # property worth testing rather than claiming: the source tests skip
+      # when `requests` is absent, so a red line here means something in the
+      # spine grew a dependency it should not have.
+      - name: Test suite on a bare interpreter (no dependencies installed)
+        run: python3 -m unittest discover -s tests
 
-      - name: Audit every store
-        run: python3 -m argus doctor
+      - name: Spine CLIs must run without dependencies
+        run: |
+          python3 -m argus doctor
+          python3 -m argus.graph stats
+          python3 -m argus.edge size --prob 0.6 --win 2 --loss 1
+
+      - run: pip install -r requirements.txt
+
+      - name: Full test suite, including the source-layer parsers
+        run: python3 -m unittest discover -s tests -v
 
       - name: Graph integrity
         run: python3 -m argus.graph stats

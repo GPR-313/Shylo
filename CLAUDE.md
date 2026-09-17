@@ -109,7 +109,7 @@ Every workflow ends with its predictions logged and its output committed. An unl
 
 - New source clients subclass `Source` in `argus/sources/base.py` — that gets caching, retries, rate limiting, and stale-cache fallback for free — and are exported from `argus/sources/__init__.py`.
 - New stores use `argus/store.py`: append-only, event-sourced, folded at read time, with a write-time validation gate. Do not invent a second persistence pattern.
-- **Tests are not optional for the spine.** `python3 -m unittest discover -s tests` runs in under a second with no third-party dependency. Anything touching validation, scoring, or sizing ships with a test; sizing tests pin hand-computed values, not captured output.
+- **Tests are not optional for the spine.** `python3 -m unittest discover -s tests` runs in under a second, and passes on a bare interpreter — the 6 source-layer tests that need `requests` skip rather than error, and CI runs the suite with and without dependencies so that stays true. Anything touching validation, scoring, or sizing ships with a test; sizing tests pin hand-computed values, not captured output.
 - Do not duplicate a connector. The `edgar` and FMP MCPs serve company-level filings and fundamentals; `argus/sources/` covers what they cannot. Two paths to the same number is a way to get two answers and no way to choose (ADR 0002).
 - Data files in `data/` are committed; `.cache/` is not.
 - Significant process changes get an ADR in `docs/decisions/`.

@@ -180,8 +180,15 @@ def snapshot() -> dict[str, Any]:
     different schedules, and a regime call built from a three-week-old credit
     print and a same-day SOFR is not the snapshot it looks like.
     """
-    from .sources import Fred
-    from .sources.base import SourceError
+    try:
+        from .sources import Fred
+        from .sources.base import SourceError
+    except ImportError as exc:  # `requests` absent -- the rest of ARGUS still works
+        raise SystemExit(
+            f"argus.regime snapshot needs the OBSERVE layer ({exc}). Install with "
+            "`pip install -r requirements.txt`, or pass the readings directly:\n"
+            "  python -m argus.regime --sofr 4.30 --iorb 4.40 --hy-oas 312 --curve 0.45"
+        ) from exc
 
     fred = Fred()
     readings: dict[str, float | None] = {}

@@ -121,11 +121,11 @@ A flat calibration curve is an emergency. So is a persistent loss in the market 
 ```bash
 git clone <this-repo> && cd Shylo
 ./scripts/setup.sh                  # venv, deps, .env, source health check
-python3 -m unittest discover -s tests   # 146 tests, under a second, stdlib only
+python3 -m unittest discover -s tests   # 146 tests in under a second
 python3 -m argus status             # what needs attention right now
 ```
 
-Nothing but the standard library is needed to run the stores, the scoring, the graph, or the sizing engine. Keys only gate the OBSERVE layer.
+Nothing but the standard library is needed to run the stores, the scoring, the graph, or the sizing engine — 140 of the 146 tests pass on a bare interpreter, and the 6 that need `requests` (the source-layer parsers) skip rather than error. CI runs the suite both ways so that stays true. Keys only gate the OBSERVE layer.
 
 ### The commands
 
@@ -175,7 +175,7 @@ python3 scripts/check_sources.py    # is every source reachable?
 | `argus/regime.py` | Macro regime classifier with stated invalidation conditions |
 | `argus/__main__.py` | `python -m argus status / doctor / agenda` |
 | `argus/sources/` | Seventeen cached, rate-limited REST clients for the OBSERVE layer |
-| `tests/` | 146 stdlib tests; the spine's regression suite |
+| `tests/` | 146 tests; the spine's regression suite, 140 of them dependency-free |
 | `data/ledger/predictions.jsonl` | The prediction ledger |
 | `data/theses.jsonl`, `data/catalysts.jsonl` | Thesis registry and catalyst calendar |
 | `data/briefs/`, `data/reviews/` | Dated Morning Briefs and weekly self-review memos |

@@ -213,18 +213,30 @@ class Scoring(StoreCase):
 
 
 class Audit(StoreCase):
-    def test_audit_catches_a_hand_edited_probability(self):
+    def _audit(self) -> int:
+        """Run the audit command, swallowing its diagnostics.
+
+        These tests assert a failing audit, so "AUDIT FAILED" on stdout is the
+        expected behaviour -- but printed into a passing CI log it reads as a
+        real failure to anyone scanning, which is its own small kind of
+        dishonesty.
+        """
         import argparse
+        import contextlib
+        import io
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            return self.L._cmd_audit(argparse.Namespace())
+
+    def test_audit_catches_a_hand_edited_probability(self):
         self.write_raw(self.ledger_path, {**LegacySchema.LEGACY, "probability": 1.0})
-        self.assertEqual(self.L._cmd_audit(argparse.Namespace()), 1)
+        self.assertEqual(self._audit(), 1)
 
     def test_audit_catches_a_resolution_with_no_prediction(self):
-        import argparse
         self.write_raw(self.ledger_path,
                        {"kind": "resolution", "prediction_id": "ghost", "outcome": True})
-        self.assertEqual(self.L._cmd_audit(argparse.Namespace()), 1)
+        self.assertEqual(self._audit(), 1)
 
     def test_audit_passes_on_a_clean_ledger(self):
-        import argparse
         self.add_prediction()
-        self.assertEqual(self.L._cmd_audit(argparse.Namespace()), 0)
+        self.assertEqual(self._audit(), 0)

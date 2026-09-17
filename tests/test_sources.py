@@ -4,14 +4,28 @@ Most of `argus/sources/` is thin REST plumbing whose correctness depends on a
 live endpoint. The parsing that does *not* — the EDGAR fixed-width daily index,
 which breaks on company names with spaces and form types like `SC 13D/A` — is
 exactly where a silent bug would go unnoticed, so it is pinned here.
+
+These are the only tests in the suite that need `requests`, because importing
+any source client pulls in `argus/sources/base.py`. They skip rather than error
+when it is absent, so `python3 -m unittest discover -s tests` still passes on a
+bare interpreter — the spine's stores, scoring, sizing, and graph are stdlib
+only, and that property is worth keeping testable rather than merely claimed.
+CI runs the suite both ways for exactly that reason.
 """
 
 from __future__ import annotations
 
 import unittest
 
-from argus.sources.base import SourceError
-from argus.sources.positioning import EdgarDailyIndex
+try:
+    from argus.sources.base import SourceError
+    from argus.sources.positioning import EdgarDailyIndex
+
+    HAS_REQUESTS = True
+except ImportError:                      # pragma: no cover - dependency-free run
+    HAS_REQUESTS = False
+    SourceError = Exception
+    EdgarDailyIndex = None
 
 INDEX = """Description:           Daily Index of EDGAR Dissemination Feed by Form Type
 Last Data Received:    September 17, 2026
@@ -25,6 +39,7 @@ SC 13D/A    ELLIOTT INVESTMENT MANAGEMENT L.P.                            179178
 """
 
 
+@unittest.skipUnless(HAS_REQUESTS, "requests not installed; argus.sources needs it")
 class DailyIndexParsing(unittest.TestCase):
     def test_parses_every_data_row(self):
         self.assertEqual(len(EdgarDailyIndex._parse(INDEX)), 4)
