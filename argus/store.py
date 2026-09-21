@@ -13,6 +13,7 @@ Stdlib only, deliberately. The spine keeps working when `requirements.txt` rots.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -134,7 +135,10 @@ def fold(
             if key is None:
                 print(f"warn: {path.name}: {base_kind} with no {id_field}", file=sys.stderr)
                 continue
-            state[key] = {**raw, "kind": kind, **(initial or {})}
+            # deepcopy: a shared list in `initial` would otherwise be the *same*
+            # object in every entity, so evidence logged against one thesis would
+            # appear on all of them and silently disable the EP-000e alarm.
+            state[key] = {**raw, "kind": kind, **copy.deepcopy(initial or {})}
         elif kind in apply_events:
             target = raw.get(f"{base_kind}_id") or raw.get(id_field)
             entity = state.get(target)

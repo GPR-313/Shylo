@@ -80,6 +80,31 @@ class AppendAndFold(unittest.TestCase):
                            apply_events={"bump": bump}, initial={"count": 0})
         self.assertEqual(state["a"]["count"], 5)
 
+    def test_mutable_initials_are_not_shared_between_entities(self):
+        # Regression: `initial` was spread by reference, so every entity got the
+        # *same* list object. Evidence logged against one thesis then showed up on
+        # all of them, and `argus status` reported the whole book as undercut --
+        # which is EP-000e's alarm, disabled without anything looking broken.
+        def note(entity, event):
+            entity["log"].append(event["text"])
+
+        store.append_record(self.path, {"kind": "thing", "id": "a"})
+        store.append_record(self.path, {"kind": "thing", "id": "b"})
+        store.append_record(self.path, {"kind": "note", "thing_id": "a", "text": "only-a"})
+        state = store.fold(self.path, base_kind="thing",
+                           apply_events={"note": note}, initial={"log": []})
+
+        self.assertEqual(state["a"]["log"], ["only-a"])
+        self.assertEqual(state["b"]["log"], [])
+        self.assertIsNot(state["a"]["log"], state["b"]["log"])
+
+    def test_nested_mutable_initials_are_not_shared_either(self):
+        store.append_record(self.path, {"kind": "thing", "id": "a"})
+        store.append_record(self.path, {"kind": "thing", "id": "b"})
+        state = store.fold(self.path, base_kind="thing", initial={"meta": {"tags": []}})
+        state["a"]["meta"]["tags"].append("x")
+        self.assertEqual(state["b"]["meta"]["tags"], [])
+
     def test_an_event_for_an_unknown_entity_is_dropped_loudly(self):
         import contextlib, io
         store.append_record(self.path, {"kind": "bump", "thing_id": "ghost", "by": 1})
